@@ -23,6 +23,7 @@ server.listen(1)
 input = [server, sys.stdin]
 
 connections = []
+channels = []
 
 class User:
   def __init__(name, password, connection):
@@ -46,8 +47,27 @@ class User:
     now = time.time()
     # send client message PING
 
+  def inChannel(channel):
+    return channel in channels
+
   def getChannels():
     return self.channels
+
+  def join(channel):
+    if channel in channels:
+      # user already in channel
+      return ERR_ALREADYINCHAN
+    else:
+      # user not in channel, join channel
+      self.channels.append(channel)
+      return OK_JOIN
+
+  def leave(channel):
+    if channel in channels:
+      self.channels.remove(channel) 
+      return OK_LEAVE
+    else:
+      return ERR_NOCHAN
 
   def sendMessage(message):
     # find connection for this user
@@ -97,37 +117,29 @@ class UserManager:
       if name == user.getName():
         user.sendMessage(message)
 
-  def channelUsers
+  def channelList():
+    '''
+    return list of channels on the server
+    '''
+    # does this in a hacky way by querying each user's channel list, and returning that
+    channels = []
+    for user in self.users:
+      t = user.getChannels()
+      for chan in t:
+        if chan not in channels:
+          # if not in list already, add it. this way no duplicates
+          channels.append(chan)
+    return channels
 
-    return True
+  def channelUsers(channel):
+    channel_users = []
+    for user in self.users:
+      if user.inChannel():
+        channel_users.append(user.getName())
+    return channel_users
 
-    return False
 
-
-def sendAll(msg):
-  '''
-  broadcast to all connections
-  '''
-  for connection in connections:
-    connection.send(msg)
-    import pdb; pdb.set_trace()
-
-def parseCommand(data):
-  '''
-  deciphers the command sent to server, and returns appropriate message
-  '''
-
-  try:
-    command = str(data)
-
-  except:
-    # return ERR_INVALID
-    msg = "%{0} {1} %{2}".format(host, ERR_INVALID, "String not parsable.")
-    return msg
-
-  # msg is a valid string, so parse from there.
-  #regex = "(.*)\ (.*)\ 
-  # write pythex
+# main loop
 
 while running:
  
@@ -149,7 +161,6 @@ while running:
         print "conn closed"
         connections.remove(connection)
       else:
-        print "msg all"
-        sendAll(data)
+        # do something with incoming data message
 
 server.close()
