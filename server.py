@@ -161,26 +161,72 @@ def dispatch(message):
   regex_list.append(list_regex)
 
   for regex in regex_list:
-    if(re.match(regex, message)):
+    r = re.match(regex, message)
+    if(r is not None):
       # there was a match with this regex
+
       if regex == pong_regex:
-        return pong()
+        timestamp = r.groups()[0]
+        return pong(timestamp)
+
       elif regex == quit_regex:
         return quit()
+
       elif regex == reg_regex:
-        return register()
+        username = r.groups()[0]
+        password = r.groups()[1]
+        return register(username, password)
+
       elif regex == auth_regex:
-        return authenticate()
+        username = r.groups()[0]
+        password = r.groups()[1]
+        return authenticate(username, password)
+
       elif regex == msg_regex:
-        return msg()
+        channel = r.groups()[0]
+        message = r.groups()[1]
+        return msg(channel, message)
+
       elif regex == join_regex:
-        return join()
+        channel = r.groups()[0]
+        return join(channel)
+
       elif regex == leave_regex:
-        return leave()
+        channel = r.groups()[0]
+        return leave(channel)
+
       elif regex == list_regex:
+        # list channels
         return listChannels()
+
       else:
+        # invalid input
         return invalid()
+
+
+def pong(timestamp):
+  pass
+
+def quit():
+  pass
+
+def register(username, password):
+  pass
+
+def authenticate(username, password):
+  pass
+
+def msg(channel, message):
+  pass
+
+def join(channel)
+  pass
+
+def leave(channel):
+  pass
+
+def listChannels():
+  return user_manager.channelList()   
 
 def invalid():
   return "{0} {1}\r".format(fqdn, ERR_INVALID)
