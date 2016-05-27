@@ -21,6 +21,7 @@ server.bind((host, port))
 running = True
 server.listen(1)
 input = [server, sys.stdin]
+fqdn = socket.gethostbyname(socket.gethostname())
 
 connections = []
 channels = []
@@ -139,7 +140,54 @@ class UserManager:
     return channel_users
 
 
+def dispatch(message):
+  pong_regex = '^PONG\ ([0-9]+)'
+  quit_regex = '^QUIT'
+  reg_regex = '^REG\ (\w+)\ (\w+)'
+  auth_regex = '^AUTH\ (\w+)\ (\w+)'
+  msg_regex = '^MSG\ #(\w+)\ (\w.*)'
+  join_regex = '^JOIN\ #(\w+)'
+  leave_regex = '^LEAVE\ #(\w+)'
+  list_regex = '^LIST'
+
+  regex_list = []
+  regex_list.append(pong_regex)
+  regex_list.append(quit_regex)
+  regex_list.append(reg_regex)
+  regex_list.append(auth_regex)
+  regex_list.append(msg_regex)
+  regex_list.append(join_regex)
+  regex_list.append(leave_regex)
+  regex_list.append(list_regex)
+
+  for regex in regex_list:
+    if(re.match(regex, message)):
+      # there was a match with this regex
+      if regex == pong_regex:
+        return pong()
+      elif regex == quit_regex:
+        return quit()
+      elif regex == reg_regex:
+        return register()
+      elif regex == auth_regex:
+        return authenticate()
+      elif regex == msg_regex:
+        return msg()
+      elif regex == join_regex:
+        return join()
+      elif regex == leave_regex:
+        return leave()
+      elif regex == list_regex:
+        return listChannels()
+      else:
+        return invalid()
+
+def invalid():
+  return "{0} {1}\r".format(fqdn, ERR_INVALID)
+
 # main loop
+
+user_manager = userManager()
 
 while running:
  
@@ -162,5 +210,6 @@ while running:
         connections.remove(connection)
       else:
         # do something with incoming data message
+        dispatch(data)
 
 server.close()
