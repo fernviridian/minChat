@@ -11,20 +11,9 @@ import re
 import sys
 import select
 from status_codes import *
-
-host = ''
-port = 9999
-keepalive = 20  # ping every 20 seconds to see if client is connected
-size = 1024
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((host, port))
-running = True
-server.listen(1)
-input = [server, sys.stdin]
-fqdn = socket.gethostbyname(socket.gethostname())
-
-connections = []
-channels = []
+############################################################################
+# user class
+############################################################################
 
 class User:
   def __init__(name, password, connection):
@@ -81,12 +70,15 @@ class User:
   def getPassword():
     return self.password
 
+############################################################################
+# user manager class
+############################################################################
 
 class UserManager:
   def __init__():
     self.users = []
 
-  def createUser(name, password, connection):
+  def register(name, password, connection):
 
     # check to see if user already exists
     for user in self.users:
@@ -96,8 +88,9 @@ class UserManager:
         if(re.match('^[a-zA-Z0-9_]+$', name) and re.match('^[a-zA-Z0-9_]+$', password)):
           user = User(name, password, connection)
           users.append(user)
+          return OK_REG
         else:
-        return ERR_INVALID
+          return ERR_INVALID
 
   def authenticate(name, password, connection):
     # check to see if user exists
@@ -106,7 +99,7 @@ class UserManager:
         # found user, try to authenticate
         if password == user.getPassword():
           user.updateConnection(connection)
-          return True
+          return OK_AUTH
         else:
           return ERR_DENIED
 
@@ -130,7 +123,12 @@ class UserManager:
         if chan not in channels:
           # if not in list already, add it. this way no duplicates
           channels.append(chan)
-    return channels
+    if not channels:
+      # no channels to list, return error code to client
+      return ERR_NOCHAN
+    else:
+      # return list object of channels
+      return channels
 
   def channelUsers(channel):
     channel_users = []
@@ -139,8 +137,11 @@ class UserManager:
         channel_users.append(user.getName())
     return channel_users
 
+############################################################################
+# dispatch regex matching
+############################################################################
 
-def dispatch(message):
+def dispatch(message, connection):
   pong_regex = '^PONG\ ([0-9]+)'
   quit_regex = '^QUIT'
   reg_regex = '^REG\ (\w+)\ (\w+)'
@@ -175,12 +176,12 @@ def dispatch(message):
       elif regex == reg_regex:
         username = r.groups()[0]
         password = r.groups()[1]
-        return register(username, password)
+        return register(username, password, connection)
 
       elif regex == auth_regex:
         username = r.groups()[0]
         password = r.groups()[1]
-        return authenticate(username, password)
+        return authenticate(username, password, connection)
 
       elif regex == msg_regex:
         channel = r.groups()[0]
@@ -203,18 +204,25 @@ def dispatch(message):
         # invalid input
         return invalid()
 
+############################################################################
+# dispatch functions
+############################################################################
 
 def pong(timestamp):
+  
   pass
 
 def quit():
-  pass
+  # server got quit message from client, let client know
+  # they can disconnect now. this is a nicety, and not required.
+  return "%{0} {1}\r".format(fqdn, OK_QUIT)
 
-def register(username, password):
-  pass
+def register(username, password, connection):
+  # called when client wants to register a nickname
+  return "%{0} {1}\r".format(fqdn, user_manager.register(username, password, connection))
 
-def authenticate(username, password):
-  pass
+def authenticate(username, password, connection):
+  return "%{0} {1}\r".format(fqdn, user_manager.authenticate(username, password, connection))
 
 def msg(channel, message):
   pass
@@ -226,14 +234,38 @@ def leave(channel):
   pass
 
 def listChannels():
-  return user_manager.channelList()   
+  ret = user_manager.channelList()
+  if type(ret) is not list:
+    # something went wrong
+    return "%{0} {1}\r".format(fqdn, ret)
+  else:
+    channels = ",".join(ret)
+    return "%{0} {1} {2}".format(fwdn, OK_LIST, channels)
 
 def invalid():
-  return "{0} {1}\r".format(fqdn, ERR_INVALID)
+  return "%{0} {1}\r".format(fqdn, ERR_INVALID)
 
-# main loop
+############################################################################
+# globals
+############################################################################
 
 user_manager = userManager()
+host = ''
+port = 9999
+keepalive = 20  # ping every 20 seconds to see if client is connected
+size = 1024
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((host, port))
+running = True
+server.listen(1)
+input = [server, sys.stdin]
+fqdn = socket.gethostbyname(socket.gethostname())
+connections = []
+channels = []
+
+############################################################################
+# main server loop
+############################################################################
 
 while running:
  
@@ -256,6 +288,6 @@ while running:
         connections.remove(connection)
       else:
         # do something with incoming data message
-        dispatch(data)
+        dispatch(data, connection)
 
 server.close()
