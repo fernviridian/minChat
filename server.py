@@ -11,6 +11,7 @@ import re
 import sys
 import select
 from status_codes import *
+
 ############################################################################
 # user class
 ############################################################################
@@ -24,6 +25,7 @@ class User:
     self.port = port
     self.channels = []
     self.time = time.time()
+    self.connection = connection
 
   def getName():
     return self.name
@@ -70,6 +72,13 @@ class User:
   def getPassword():
     return self.password
 
+  def isConnection(conn):
+    # check if connection passed is is for this user...
+    if conn == self.connection:
+      return True
+    else:
+     return False
+
 ############################################################################
 # user manager class
 ############################################################################
@@ -79,7 +88,6 @@ class UserManager:
     self.users = []
 
   def register(name, password, connection):
-
     # check to see if user already exists
     for user in self.users:
       if name == user.getName():
@@ -137,6 +145,21 @@ class UserManager:
         channel_users.append(user.getName())
     return channel_users
 
+  def join(channel, connection):
+    for user in self.users:
+      if user.isConnection(connection):
+        # found the user
+        status = user.join(channel)
+        return status
+      else:
+        # no user found?
+        return ERR_INVALID
+      
+
+  def leave(channel, connection):
+
+  def message(channel, connection):
+
 ############################################################################
 # dispatch regex matching
 ############################################################################
@@ -186,7 +209,7 @@ def dispatch(message, connection):
       elif regex == msg_regex:
         channel = r.groups()[0]
         message = r.groups()[1]
-        return msg(channel, message)
+        return message(channel, message)
 
       elif regex == join_regex:
         channel = r.groups()[0]
@@ -224,14 +247,20 @@ def register(username, password, connection):
 def authenticate(username, password, connection):
   return "%{0} {1}\r".format(fqdn, user_manager.authenticate(username, password, connection))
 
-def msg(channel, message):
-  pass
+def message(channel, message, connection):
+  # called when a user messages a channel. 
+  # looks up user that sent message by connection object, and then sends
+  # message to other users in the same specified channel
+  return "%{0} {1}\r".format(fqdn, user_manager.message(channel, message, connection))
 
-def join(channel)
-  pass
+def join(channel, connection)
+  # based on connection user_manager looks up the user object with that connection
+  # and then has that user join the channel.
+  return "%{0} {1}\r".format(fqdn, user_manager.join(channel, connection))
 
-def leave(channel):
-  pass
+def leave(channel, connection):
+  # based on connection look up user object and leave channel
+  return "%{0} {1}\r".format(fqdn, user_manager.leave(channel, connection))
 
 def listChannels():
   ret = user_manager.channelList()
@@ -288,6 +317,7 @@ while running:
         connections.remove(connection)
       else:
         # do something with incoming data message
-        dispatch(data, connection)
+        server_response = dispatch(data, connection)
+        connection.send(server_response)
 
 server.close()
