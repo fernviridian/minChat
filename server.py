@@ -157,8 +157,67 @@ class UserManager:
       
 
   def leave(channel, connection):
+    for user in self.users:
+      if user.isConnection(connection):
+        # found the user
+          status = user.leave(channel)
+          return status
+        else:
+          # no user found?
+          return ERR_INVALID
 
-  def message(channel, connection):
+  def message(channel, message, connection):
+    # confirm user in channel (redundant, but still check)
+    # get user name who is sending message
+    # get list of users in channel self.channelUsers()
+    # get socket connections for each of those users
+    # for each user, send message from send_user to recv_user
+    # TODO check if user hangs, and skip that user if necessary.
+    # messages were sent to all users successfully :)
+    # send confirm to send_user when messages sent succesfuuly.
+    done = False
+
+    for user in self.users:
+      if user.isConnection(connection):
+        # found the sender user
+        # get sender user name
+        send_user = user.getName()
+        # confirm user in channel:
+        if user.inChannel(channel):
+          # user is in that channel, can send message
+          # need to get list of users in that room, and their connections
+          for user in self.users:
+            # f*&k efficiency, lets do this!
+            users_in_channel = []
+            if user.inChannel(channel):
+              users_in_channel.append(user)
+          # got a list of users in the channel, now send them a message
+          #%<FQDN> <status code> <channel/priv_msg_user> <username> %<message>\r
+          msg_string = "%{0} {1} {2} {3} %{4}\r".format(fqdn, OK_MSG, channel, send_user, message)
+          for user in users_in_channel:
+            # message user
+            user.sendMessage(msg_string)
+            # what if sendMessage fails? TODO
+            done = True
+          break
+          
+        else:
+          # user not allowed to message that channel
+          return ERR_DENIED
+
+      if(done):
+        # outside for loop. let send_user know message was sent successfully.
+        return OK_SEND
+
+      else:
+        # catch all, something went wrong
+        return ERR_INVALID
+
+
+  def ping():
+    # ping all users to see if they are alive.
+    # TODO
+    pass
 
 ############################################################################
 # dispatch regex matching
@@ -209,7 +268,7 @@ def dispatch(message, connection):
       elif regex == msg_regex:
         channel = r.groups()[0]
         message = r.groups()[1]
-        return message(channel, message)
+        return message(channel, message, connection)
 
       elif regex == join_regex:
         channel = r.groups()[0]
@@ -282,6 +341,7 @@ user_manager = userManager()
 host = ''
 port = 9999
 keepalive = 20  # ping every 20 seconds to see if client is connected
+keepalive_response_time = 5  # the client gets 5 seconds to respond
 size = 1024
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((host, port))
@@ -297,6 +357,16 @@ channels = []
 ############################################################################
 
 while running:
+
+  # shitty keepalive here......
+  previous_time = time.time()
+
+  now = time.time()
+  if(now - previous_time > keepalive):
+    # run keepalive bulsshit
+    # hacky timeout without threads is nasty?
+    user_manager.ping()
+    current_time = now
  
   readable, writable, errored = select.select([server] + connections, [], [])
   for connection in readable:
