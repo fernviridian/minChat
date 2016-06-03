@@ -17,7 +17,7 @@ from status_codes import *
 ############################################################################
 
 class User:
-  def __init__(name, password, connection):
+  def __init__(self, name, password, connection):
     self.name = name
     self.password = password
     ip, port = connection.getsockname()
@@ -27,25 +27,25 @@ class User:
     self.time = time.time()
     self.connection = connection
 
-  def getName():
+  def getName(self):
     return self.name
 
-  def updateConnection(connection):
+  def updateConnection(self, connection):
     ip, port = connection.getsockname()
     self.ip = ip
     self.port = port
 
-  def checkTimeout():
+  def checkTimeout(self):
     now = time.time()
     # send client message PING
 
-  def inChannel(channel):
+  def inChannel(self, channel):
     return channel in channels
 
-  def getChannels():
+  def getChannels(self):
     return self.channels
 
-  def join(channel):
+  def join(self, channel):
     if channel in channels:
       # user already in channel
       return ERR_ALREADYINCHAN
@@ -54,14 +54,14 @@ class User:
       self.channels.append(channel)
       return OK_JOIN
 
-  def leave(channel):
+  def leave(self, channel):
     if channel in channels:
       self.channels.remove(channel) 
       return OK_LEAVE
     else:
       return ERR_NOCHAN
 
-  def sendMessage(message):
+  def sendMessage(self, message):
     # find connection for this user
     for connection in connections:
       ip, port = connection.getsockname()
@@ -69,10 +69,10 @@ class User:
         # send message
         connection.send(message)
 
-  def getPassword():
+  def getPassword(self):
     return self.password
 
-  def isConnection(conn):
+  def isConnection(self, conn):
     # check if connection passed is is for this user...
     if conn == self.connection:
       return True
@@ -84,10 +84,11 @@ class User:
 ############################################################################
 
 class UserManager:
-  def __init__():
+  # class that manages all the users
+  def __init__(self):
     self.users = []
 
-  def register(name, password, connection):
+  def register(self, name, password, connection):
     # check to see if user already exists
     for user in self.users:
       if name == user.getName():
@@ -100,7 +101,7 @@ class UserManager:
         else:
           return ERR_INVALID
 
-  def authenticate(name, password, connection):
+  def authenticate(self, name, password, connection):
     # check to see if user exists
     for user in self.users:
       if name == user.getName():
@@ -111,7 +112,7 @@ class UserManager:
         else:
           return ERR_DENIED
 
-  def sendMessage(name, message):
+  def sendMessage(self, name, message):
     '''
     just relays along message formatted elsewhere
     '''
@@ -119,7 +120,7 @@ class UserManager:
       if name == user.getName():
         user.sendMessage(message)
 
-  def channelList():
+  def channelList(self):
     '''
     return list of channels on the server
     '''
@@ -138,14 +139,14 @@ class UserManager:
       # return list object of channels
       return channels
 
-  def channelUsers(channel):
+  def channelUsers(self, channel):
     channel_users = []
     for user in self.users:
       if user.inChannel():
         channel_users.append(user.getName())
     return channel_users
 
-  def join(channel, connection):
+  def join(self, channel, connection):
     for user in self.users:
       if user.isConnection(connection):
         # found the user
@@ -156,7 +157,7 @@ class UserManager:
         return ERR_INVALID
       
 
-  def leave(channel, connection):
+  def leave(self, channel, connection):
     for user in self.users:
       if user.isConnection(connection):
         # found the user
@@ -166,7 +167,7 @@ class UserManager:
           # no user found?
           return ERR_INVALID
 
-  def message(channel, message, connection):
+  def message(self, channel, message, connection):
     # confirm user in channel (redundant, but still check)
     # get user name who is sending message
     # get list of users in channel self.channelUsers()
@@ -214,7 +215,7 @@ class UserManager:
         return ERR_INVALID
 
 
-  def ping():
+  def ping(self):
     # ping all users to see if they are alive.
     # TODO
     pass
