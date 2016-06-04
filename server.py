@@ -194,7 +194,7 @@ class UserManager:
               users_in_channel.append(user)
           # got a list of users in the channel, now send them a message
           #%<FQDN> <status code> <channel/priv_msg_user> <username> %<message>\r
-          msg_string = "%{0} {1} {2} {3} %{4}\r".format(fqdn, OK_MSG, channel, send_user, message)
+          msg_string = "%{0} {1} {2} %{3}\r".format(OK_MSG, channel, send_user, message)
           for user in users_in_channel:
             # message user
             user.sendMessage(msg_string)
@@ -298,41 +298,41 @@ def pong(timestamp):
 def quit():
   # server got quit message from client, let client know
   # they can disconnect now. this is a nicety, and not required.
-  return "%{0} {1}\r".format(fqdn, OK_QUIT)
+  return "%{0}\r".format(OK_QUIT)
 
 def register(username, password, connection):
   # called when client wants to register a nickname
-  return "%{0} {1}\r".format(fqdn, user_manager.register(username, password, connection))
+  return "%{0}\r".format(user_manager.register(username, password, connection))
 
 def authenticate(username, password, connection):
-  return "%{0} {1}\r".format(fqdn, user_manager.authenticate(username, password, connection))
+  return "%{0}\r".format(user_manager.authenticate(username, password, connection))
 
 def message(channel, message, connection):
   # called when a user messages a channel. 
   # looks up user that sent message by connection object, and then sends
   # message to other users in the same specified channel
-  return "%{0} {1}\r".format(fqdn, user_manager.message(channel, message, connection))
+  return "%{0}\r".format(user_manager.message(channel, message, connection))
 
 def join(channel, connection)
   # based on connection user_manager looks up the user object with that connection
   # and then has that user join the channel.
-  return "%{0} {1}\r".format(fqdn, user_manager.join(channel, connection))
+  return "%{0}\r".format(user_manager.join(channel, connection))
 
 def leave(channel, connection):
   # based on connection look up user object and leave channel
-  return "%{0} {1}\r".format(fqdn, user_manager.leave(channel, connection))
+  return "%{0}\r".format(user_manager.leave(channel, connection))
 
 def listChannels():
   ret = user_manager.channelList()
   if type(ret) is not list:
     # something went wrong
-    return "%{0} {1}\r".format(fqdn, ret)
+    return "%{0}\r".format(ret)
   else:
     channels = ",".join(ret)
-    return "%{0} {1} {2}".format(fwdn, OK_LIST, channels)
+    return "%{0} {1}".format(OK_LIST, channels)
 
 def invalid():
-  return "%{0} {1}\r".format(fqdn, ERR_INVALID)
+  return "%{0}\r".format(ERR_INVALID)
 
 ############################################################################
 # globals
@@ -349,7 +349,6 @@ server.bind((host, port))
 running = True
 server.listen(1)
 input = [server, sys.stdin]
-fqdn = socket.gethostbyname(socket.gethostname())
 connections = []
 channels = []
 
@@ -389,6 +388,6 @@ while running:
       else:
         # do something with incoming data message
         server_response = dispatch(data, connection)
-        connection.send(server_response)
+        connection.send("%{0}".format(server_response))
 
 server.close()
