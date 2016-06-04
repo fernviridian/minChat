@@ -1,11 +1,16 @@
 #! /usr/bin/env python
 
+# ben reichert's minchat client
+
+# helpful references
+# https://code.activestate.com/recipes/531824-chat-server-client-using-selectselect/
 
 import socket
 import sys
 import time
 import re
 from status_codes import *
+import select
 
 size = 1024
 
@@ -52,7 +57,7 @@ class Client:
     
     try:
       self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-      self.sock.connect((self.host, self.port))
+      self.socket.connect((self.host, self.port))
       print "Connected to minChat server: {0}:{1}".format(self.host, self.port)
 
     except:
@@ -107,7 +112,7 @@ class Client:
         if regex == msg_regex:
           channel = r.groups()[0]
           message = r.groups()[1]
-          return 'MSG {0} #{1}\r'.format(channel, message)
+          return 'MSG #{0} %{1}\r'.format(channel, message)
 
         elif regex == join_regex:
           channel = r.groups()[0]
@@ -148,7 +153,7 @@ class Client:
     # translate server return codes
     status_regex = '^%(\d+)'
     r = re.match(status_regex, msg)
-    status_code = re.groups()[0]
+    status_code = r.groups()[0]
     switcher = {
         OK_QUIT: 'OK_QUIT',
         OK_REG: 'OK_REG',
@@ -173,7 +178,7 @@ class Client:
         ERR_ALREADYINCHAN: 'ERR_ALREADYINCHAN',
         ERR_OOM: 'ERR_OOM',
       }
-    return switcher.get(argument, status_code)
+    return switcher.get(status_code, status_code)
 
 
   def serverTranslate(self, data):
@@ -238,7 +243,8 @@ class Client:
         sys.stdout.flush()
         
         # get input from stdin, server socket
-        inputready, outputready, exceptready = select.select([0, self.sock], [],[])
+        inputready, outputready, exceptready = select.select([0, self.socket], [],[])
+        server_response = None
 
         for socket in inputready:
 
@@ -246,11 +252,14 @@ class Client:
             # stdin
             data = sys.stdin.readline().strip()
             server_command = self.commandTranslate(data)
+            if(server_command is None):
+              print "invalid command"
+              continue
             if('QUIT' in server_command):
               # EXIT
               self.done = True
 
-                       if not server_command:
+            if not server_command:
               # error parsing
               print "Could not parse command."
               continue
@@ -292,11 +301,14 @@ class Client:
 
               print "Server responded with {0}".format(resp)
             import time
-            time.sleep(0.5) # debug
+            time.sleep(1) # debug
                        
           elif socket == self.socket:
             # message from server
             # ping or new message has arrived.
+            if not server_response:
+              print "no connection to server"
+              sys.exit(1)
             server_translated = self.serverTranslate(server_response)  # figure out what to do based on response
             if not server_translated:
               #error parsing

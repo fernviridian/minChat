@@ -40,13 +40,13 @@ class User:
     # send client message PING
 
   def inChannel(self, channel):
-    return channel in channels
+    return channel in self.channels
 
   def getChannels(self):
     return self.channels
 
   def join(self, channel):
-    if channel in channels:
+    if channel in self.channels:
       # user already in channel
       return ERR_ALREADYINCHAN
     else:
@@ -55,7 +55,7 @@ class User:
       return OK_JOIN
 
   def leave(self, channel):
-    if channel in channels:
+    if channel in self.channels:
       self.channels.remove(channel) 
       return OK_LEAVE
     else:
@@ -63,11 +63,7 @@ class User:
 
   def sendMessage(self, message):
     # find connection for this user
-    for connection in connections:
-      ip, port = connection.getsockname()
-      if ip = self.ip and port = self.port:
-        # send message
-        connection.send(message)
+    self.connection.send(message)
 
   def getPassword(self):
     return self.password
@@ -88,21 +84,38 @@ class UserManager:
   def __init__(self):
     self.users = []
 
+  def getUsernames(self):
+    usernames = []
+    for user in self.users:
+      usernames.append(user.getName())
+    return usernames
+
   def register(self, name, password, connection):
     # check to see if user already exists
-    for user in self.users:
-      if name == user.getName():
+    if not self.users:
+      # no users registered yet:
+      user = User(name, password, connection)
+      self.users.append(user)
+      return OK_REG
+
+    else:
+      # users exist already
+      if name in self.getUsernames():
         return ERR_USERNAME_TAKEN
-      else:
-        if(re.match('^[a-zA-Z0-9_]+$', name) and re.match('^[a-zA-Z0-9_]+$', password)):
-          user = User(name, password, connection)
-          users.append(user)
-          return OK_REG
-        else:
-          return ERR_INVALID
+      for user in self.users:
+          if(re.match('^[a-zA-Z0-9_]+$', name) and re.match('^[a-zA-Z0-9_]+$', password)):
+            user = User(name, password, connection)
+            self.users.append(user)
+            return OK_REG
+          else:
+            return ERR_INVALID
 
   def authenticate(self, name, password, connection):
     # check to see if user exists
+
+    if not self.users:
+      return ERR_NOUSER
+
     for user in self.users:
       if name == user.getName():
         # found user, try to authenticate
@@ -147,25 +160,31 @@ class UserManager:
     return channel_users
 
   def join(self, channel, connection):
+    if not self.users:
+      return ERR_NOUSER
+
     for user in self.users:
       if user.isConnection(connection):
         # found the user
         status = user.join(channel)
         return status
-      else:
-        # no user found?
-        return ERR_INVALID
+    else:
+      # no user found?
+      return ERR_NOUSER
       
 
   def leave(self, channel, connection):
+    if not self.users:
+      return ERR_NOUSER
+    
     for user in self.users:
       if user.isConnection(connection):
         # found the user
-          status = user.leave(channel)
-          return status
-        else:
-          # no user found?
-          return ERR_INVALID
+        status = user.leave(channel)
+        return status
+      else:
+        # no user found?
+        return ERR_INVALID
 
   def message(self, channel, message, connection):
     # confirm user in channel (redundant, but still check)
@@ -178,6 +197,9 @@ class UserManager:
     # send confirm to send_user when messages sent succesfuuly.
     done = False
 
+    if not self.users:
+      return ERR_DENIED
+
     for user in self.users:
       if user.isConnection(connection):
         # found the sender user
@@ -187,9 +209,9 @@ class UserManager:
         if user.inChannel(channel):
           # user is in that channel, can send message
           # need to get list of users in that room, and their connections
+          users_in_channel = []
           for user in self.users:
             # f*&k efficiency, lets do this!
-            users_in_channel = []
             if user.inChannel(channel):
               users_in_channel.append(user)
           # got a list of users in the channel, now send them a message
@@ -206,13 +228,13 @@ class UserManager:
           # user not allowed to message that channel
           return ERR_DENIED
 
-      if(done):
-        # outside for loop. let send_user know message was sent successfully.
-        return OK_SEND
+    if(done):
+      # outside for loop. let send_user know message was sent successfully.
+      return OK_SEND
 
-      else:
-        # catch all, something went wrong
-        return ERR_INVALID
+    else:
+      # catch all, something went wrong
+      return ERR_INVALID
 
 
   def ping(self):
@@ -224,12 +246,12 @@ class UserManager:
 # dispatch regex matching
 ############################################################################
 
-def dispatch(message, connection):
+def dispatch(msg, connection):
   pong_regex = '^PONG\ ([0-9]+)'
   quit_regex = '^QUIT'
   reg_regex = '^REG\ (\w+)\ (\w+)'
   auth_regex = '^AUTH\ (\w+)\ (\w+)'
-  msg_regex = '^MSG\ #(\w+)\ (\w.*)'
+  msg_regex = '^MSG\ #(\w+)\ %(\w.*)'
   join_regex = '^JOIN\ #(\w+)'
   leave_regex = '^LEAVE\ #(\w+)'
   list_regex = '^LIST'
@@ -245,7 +267,7 @@ def dispatch(message, connection):
   regex_list.append(list_regex)
 
   for regex in regex_list:
-    r = re.match(regex, message)
+    r = re.match(regex, msg)
     if(r is not None):
       # there was a match with this regex
 
@@ -268,24 +290,25 @@ def dispatch(message, connection):
 
       elif regex == msg_regex:
         channel = r.groups()[0]
-        message = r.groups()[1]
-        return message(channel, message, connection)
+        msg = r.groups()[1]
+        return message(channel, msg, connection)
 
       elif regex == join_regex:
         channel = r.groups()[0]
-        return join(channel)
+        return join(channel, connection)
 
       elif regex == leave_regex:
         channel = r.groups()[0]
-        return leave(channel)
+        return leave(channel, connection)
 
       elif regex == list_regex:
         # list channels
         return listChannels()
 
-      else:
-        # invalid input
-        return invalid()
+  else:
+    # invalid input
+    # not matching regex
+    return invalid()
 
 ############################################################################
 # dispatch functions
@@ -311,9 +334,10 @@ def message(channel, message, connection):
   # called when a user messages a channel. 
   # looks up user that sent message by connection object, and then sends
   # message to other users in the same specified channel
-  return "%{0}\r".format(user_manager.message(channel, message, connection))
+  user_manager.message(channel, message, connection)
+  return None
 
-def join(channel, connection)
+def join(channel, connection):
   # based on connection user_manager looks up the user object with that connection
   # and then has that user join the channel.
   return "%{0}\r".format(user_manager.join(channel, connection))
@@ -338,7 +362,7 @@ def invalid():
 # globals
 ############################################################################
 
-user_manager = userManager()
+user_manager = UserManager()
 host = ''
 port = 9999
 keepalive = 20  # ping every 20 seconds to see if client is connected
@@ -379,7 +403,7 @@ while running:
 
     else:
       # all other sockets, data to be read from socket
-      print "all other sockets"
+      print "all other sockets, returning client connection data"
 
       data = connection.recv(size)
       if not data:
@@ -388,6 +412,9 @@ while running:
       else:
         # do something with incoming data message
         server_response = dispatch(data, connection)
-        connection.send("%{0}".format(server_response))
+        if not server_response:
+          # HACKy stuff for message
+          continue
+        connection.send(server_response)
 
 server.close()
