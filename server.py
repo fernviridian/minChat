@@ -155,7 +155,7 @@ class UserManager:
   def channelUsers(self, channel):
     channel_users = []
     for user in self.users:
-      if user.inChannel():
+      if user.inChannel(channel):
         channel_users.append(user.getName())
     return channel_users
 
@@ -255,6 +255,7 @@ def dispatch(msg, connection):
   join_regex = '^JOIN\ #(\w+)'
   leave_regex = '^LEAVE\ #(\w+)'
   list_regex = '^LIST'
+  memlist_regex = '^MEMLIST\ #(\w+)'
 
   regex_list = []
   regex_list.append(pong_regex)
@@ -265,6 +266,7 @@ def dispatch(msg, connection):
   regex_list.append(join_regex)
   regex_list.append(leave_regex)
   regex_list.append(list_regex)
+  regex_list.append(memlist_regex)
 
   for regex in regex_list:
     r = re.match(regex, msg)
@@ -277,6 +279,10 @@ def dispatch(msg, connection):
 
       elif regex == quit_regex:
         return quit()
+
+      elif regex == memlist_regex:
+        channel = r.groups()[0]
+        return memlist(channel, connection)
 
       elif regex == reg_regex:
         username = r.groups()[0]
@@ -329,6 +335,16 @@ def register(username, password, connection):
 
 def authenticate(username, password, connection):
   return "%{0}\r".format(user_manager.authenticate(username, password, connection))
+
+def memlist(channel, connection):
+  #Client can list members of a room
+  ret = user_manager.channelUsers(channel)
+  if type(ret) is not list:
+    # something wrong
+    return "%{0}\r".format(reg)
+  else:
+    channels = ",".join(ret)
+    return "%{0} {1}\r".format(OK_LIST, channels)
 
 def message(channel, message, connection):
   # called when a user messages a channel. 
