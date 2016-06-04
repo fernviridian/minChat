@@ -31,6 +31,9 @@ class Channel:
     # line = <sender>: <message>
     self.buf.append(line)
 
+  def name(self):
+    return self.name
+
 
 class Client:
 
@@ -40,11 +43,12 @@ class Client:
     self.host = host
     self.fqdn = socket.gethostbyname(socket.gethostname())
     self.prompt = "[{0}@{1}] {2}>"
-    self.current_channel = ''
-    self.channels = []
+    self.current_channel = None # TODO
+    self.channels = [] # TODO
     self.done = False
-    self.registered = False
-    self.authenticated = False
+    self.registered = False # TODO
+    self.authenticated = False # TODO
+    self.new_window = False
     
     try:
       self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -54,12 +58,12 @@ class Client:
     except:
       print "failed to connect to server"
 
-  self.send(msg):
+  def send(self, msg):
     # send a command to server
     return self.socket.send(msg)
     
 
-  self.commandTranslate(self, data):
+  def commandTranslate(self, data):
     # like dispatch on server side. takes in user command and figures out what
     # to send to the server
 
@@ -97,49 +101,54 @@ class Client:
     
     for regex in regex_list:
       r = re.match(regex, data)
-        if(r is not None):
-          # there was a match
+      if(r is not None):
+        # there was a match
 
-          if regex == msg_regex:
-            channel = r.groups()[0]
-            message = r.groups()[1]
-            return 'MSG {0} #{1}\r'.format(channel, message)
+        if regex == msg_regex:
+          channel = r.groups()[0]
+          message = r.groups()[1]
+          return 'MSG {0} #{1}\r'.format(channel, message)
 
-          elif regex == join_regex:
-            channel = r.groups()[0]
-            return 'JOIN #{0}\r'.format(channel)
+        elif regex == join_regex:
+          channel = r.groups()[0]
+          return 'JOIN #{0}\r'.format(channel)
 
-          elif regex == leave_regex:
-            channel = r.groups()[0]
-            return 'LEAVE #{0}\r'.format(channel)
-          
-          elif regex == quit_regex:
-            return 'QUIT\r'
+        elif regex == leave_regex:
+          channel = r.groups()[0]
+          return 'LEAVE #{0}\r'.format(channel)
+        
+        elif regex == quit_regex:
+          return 'QUIT\r'
 
-          elif regex == auth_regex:
-            username = r.groups()[0]
-            password = r.groups()[1]
-            return 'AUTH {0} {1}\r'.format(username, password)
+        elif regex == auth_regex:
+          username = r.groups()[0]
+          password = r.groups()[1]
+          return 'AUTH {0} {1}\r'.format(username, password)
 
-          elif regex == reg_regex:
-            username = r.groups()[0]
-            password = r.groups()[1]
-            return 'REG {0} {1}\r'.format(username, password)
+        elif regex == reg_regex:
+          username = r.groups()[0]
+          password = r.groups()[1]
+          return 'REG {0} {1}\r'.format(username, password)
 
-          elif regex == list_regex:
-            return 'LIST\r'
+        elif regex == list_regex:
+          return 'LIST\r'
 
-          elif regex == win_regex:
-            # TODO
+        elif regex == win_regex:
+          # [0,1,2]
+          # 3 wraps around to 0 since modulo
+          self.current_channel = self.current_channel % len(self.channels)
+          self.new_window = True
 
-          else:
-            # could not parse. send error to client.
-            return None
+        else:
+          # could not parse. send error to client.
+          return None
 
   def serverStatusTranslate(self, msg):
+
     # translate server return codes
     status_regex = '^%(\d+)'
-    status_code = PADPAPFPAFP
+    r = re.match(status_regex, msg)
+    status_code = re.groups()[0]
     switcher = {
         OK_QUIT: 'OK_QUIT',
         OK_REG: 'OK_REG',
@@ -153,18 +162,17 @@ class Client:
         OK_JOIN: 'OK_JOIN',
         OK_MSG: 'OK_MSG',
         OK_SEND: 'OK_SEND',
-        ERR_BANNED = 'ERR_BANNED',
-        ERR_TIMEOUT = 'ERR_TIMEOUT',
-        ERR_INVALID = 'ERR_INVALID',
-        ERR_NOUSER = 'ERR_NOUSER',
-        ERR_DENIED = 'ERR_DENIED',
-        ERR_USERNAME_TAKEN = 'ERR_USERNAME_TAKEN',
-        ERR_TOOBIG = 'ERR_TOOBIG',
-        ERR_NOCHAN = 'ERR_NOCHAN',
-        ERR_ALREADYINCHAN = 'ERR_ALREADYINCHAN',
-        ERR_OOM = 'ERR_OOM',
-        
-    }
+        ERR_BANNED: 'ERR_BANNED',
+        ERR_TIMEOUT: 'ERR_TIMEOUT',
+        ERR_INVALID: 'ERR_INVALID',
+        ERR_NOUSER: 'ERR_NOUSER',
+        ERR_DENIED: 'ERR_DENIED',
+        ERR_USERNAME_TAKEN: 'ERR_USERNAME_TAKEN',
+        ERR_TOOBIG: 'ERR_TOOBIG',
+        ERR_NOCHAN: 'ERR_NOCHAN',
+        ERR_ALREADYINCHAN: 'ERR_ALREADYINCHAN',
+        ERR_OOM: 'ERR_OOM',
+      }
     return switcher.get(argument, status_code)
 
 
@@ -176,33 +184,36 @@ class Client:
     ping_regex = '^\%PING\ (\d+)\\r'
     #%211 #channel username %some message\r
     msg_regex = '^\%(\d+)\ #(\w+)\ (\w+)\ %(\w.*)\\r'
-
+ 
     regex_list = []
     regex_list.append(ping_regex)
     regex_list.append(msg_regex)
     
     for regex in regex_list:
       r = re.match(regex, data)
-        if(r is not None):
-          # there was a match
+      if(r is not None):
+        # there was a match
 
-          if regex == msg_regex:
-            return_code = r.groups()[0]
-            channel = r.groups()[1]
-            username = r.groups()[2]
-            message = r.groups()[3]
-            self.printMessage(channel, username, message)
+        if regex == msg_regex:
+          return_code = r.groups()[0]
+          channel = r.groups()[1]
+          username = r.groups()[2]
+          message = r.groups()[3]
+          return self.writeMessage(channel, username, message)
 
-          elif regex == ping_regex:
-            epoch = r.groups()[0]
+        elif regex == ping_regex:
+          epoch = r.groups()[0]
+          self.respondPing(epoch)
+          return 1  # good return value
 
-          else:
-            # not matching a regex, invalid
-            return None
- 
-  def printMessage(self, channel, user, message):
-    # print message to screen with current channel, etc.
-     
+        else:
+          # not matching a regex, invalid
+          return None
+
+  def writeMessage(self, channel, user, message):
+    # line = <sender>: <message>
+    channel_to_add_to = self.channels.index(channel)
+    channel_to_add_to.addLine("{0}: {1}".format(user, message))
 
   def respondPing(self, epoch):
     # respond to server message right away.
@@ -211,10 +222,19 @@ class Client:
     return
 
   def cmdloop(self):
-    while not done:
+    while not self.done:
       try:
-        # write prompt
-        sys.stdout.write(self.prompt.format(self.user, self.fqdn, self.current_channel)
+        # write screen.
+        # clear screen
+        print("\033c")
+
+        # write prompt and channel messages if we are in a channel
+        if self.current_channel:
+          print(self.channels[self.channel_number])
+          sys.stdout.write(self.prompt.format(self.user, self.fqdn, self.channels[self.current_channel].name()))
+        else:
+          sys.stdout.write(self.prompt.format(self.user, self.fqdn, ''))
+
         sys.stdout.flush()
         
         # get input from stdin, server socket
@@ -226,7 +246,11 @@ class Client:
             # stdin
             data = sys.stdin.readline().strip()
             server_command = self.commandTranslate(data)
-            if not server_command:
+            if('QUIT' in server_command):
+              # EXIT
+              self.done = True
+
+                       if not server_command:
               # error parsing
               print "Could not parse command."
               continue
@@ -235,6 +259,40 @@ class Client:
               self.socket.send(server_command)
               server_response = self.socket.recv(size)
               # parse server response
+              resp = self.serverStatusTranslate(server_response)
+
+              if('JOIN' in server_command and 'OK' in resp):
+                # join the channel
+                channel = server_command.split(' ')[1].strip('#')
+                self.channels.append(Channel(channel))  # create a new channel locally.
+
+              elif('LEAVE' in server_command and 'OK' in resp):
+                # leave channel
+                channel = str(server_command.split(' ')[1].strip('#'))
+                self.channels.remove(channel)  # delete channel locally
+
+              elif('AUTH' in server_command and 'OK' in resp):
+                # server says auth ok 
+                self.user = str(server_command.split(' ')[1])
+                self.authenticated = True
+
+              elif('REG' in server_command and 'OK' in resp):
+                # server says reg ok
+                self.user = str(server_command.split(' ')[1])
+                self.registered = True
+
+              elif('LIST' in server_command and 'OK' in resp):
+                # server says list ok status code
+                #%<status code> <list> %<optional message>\r
+                csv_channels = server_response.split(" ")[1]
+                channels = csv_channels.split(',')
+                print "Channels on the server:"
+                for channel in channels:
+                  print channel
+
+              print "Server responded with {0}".format(resp)
+            import time
+            time.sleep(0.5) # debug
                        
           elif socket == self.socket:
             # message from server
