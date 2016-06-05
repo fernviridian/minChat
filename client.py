@@ -42,9 +42,9 @@ class Channel:
 
 class Client:
 
-  def __init__(self, host='0.0.0.0', port='9999'):
+  def __init__(self, host):
     self.user = '' 
-    self.port = port
+    self.port = 9999
     self.host = host
     self.fqdn = socket.gethostbyname(socket.gethostname())
     self.prompt = "[{0}@{1}] {2} => "
@@ -222,13 +222,13 @@ class Client:
     # line = <sender>: <message>
     for c in self.channels:
       if channel == c.name:
-        c.addLine("{0}: {1}".format(user, message))
+        c.addLine("{0}: {1}\n".format(user, message))
         return
 
   def writeLine(self, channel, line):
      for c in self.channels:
       if channel == c.name:
-        c.addLine(line)
+        c.addLine(line + '\n')
         return
 
   def respondPing(self, epoch):
@@ -247,8 +247,7 @@ class Client:
         # write prompt and channel messages if we are in a channel
         if self.current_channel is not None:
           # print channel message buffer
-          sys.stdout.write(self.channels[self.current_channel].backscroll()+'\r')
-          sys.stdout.write(self.prompt.format(self.user, self.fqdn, "#{0}".format(self.channels[self.current_channel].name)))  # wut a lineeeee
+          sys.stdout.write(self.channels[self.current_channel].backscroll() + '\n' + self.prompt.format(self.user, self.fqdn, "#{0}".format(self.channels[self.current_channel].name)))  # wut a lineeeee
 
         else:
           sys.stdout.write(self.prompt.format(self.user, self.fqdn, ''))
@@ -283,6 +282,12 @@ class Client:
               # parse server response
               resp = self.serverStatusTranslate(server_response)
 
+              if('MSG' in server_command and 'OK' in resp):
+                # print message on our local screen.
+                # MSG #derp %message
+                message = server_command.split(" ")[1].strip("%").strip('\r')
+                self.writeLine(self.channels[self.current_channel].name, message)
+
               if('JOIN' in server_command and ('OK' in resp or 'ERR_ALREADYINCHAN')):
                 # join the channel
                 channel = server_command.split(' ')[1].strip('#').strip('\r')
@@ -302,7 +307,6 @@ class Client:
 
               elif('REG' in server_command and 'OK' in resp):
                 # server says reg ok
-                self.user = str(server_command.split(' ')[1])
                 self.registered = True
 
               elif('LIST' in server_command and 'OK' in resp):
@@ -342,8 +346,14 @@ class Client:
 
 
 if __name__ == '__main__':
-  if len(sys.argv) < 2:
-        sys.exit('Usage: {0} host port'.format(sys.argv[0]))
+  if len(sys.argv) < 1:
+        sys.exit('Usage: {0} host'.format(sys.argv[0]))
         
-  client = Client(sys.argv[1], int(sys.argv[2]))
+  client = Client(sys.argv[1])
   client.cmdloop()
+
+# TODO
+# add /win method
+# list clients in room
+# print list of rooms 8 Client can list members of a room 3
+# 12 Client can send distinct messages to multiple (selected) rooms 10
