@@ -17,7 +17,7 @@ size = 1024
 class Channel:
   # channel object keeps state between switching channels
   def __init__(self, name):
-    self.name = name
+    self.name = name.strip('\r').strip('#')
     self.buf = []
     # ideally we should limit buffer size, but not in the scope of this project.
     # and also prune old messages so we dont consume too much memory
@@ -47,12 +47,12 @@ class Client:
     self.port = port
     self.host = host
     self.fqdn = socket.gethostbyname(socket.gethostname())
-    self.prompt = "[{0}@{1}] {2}>"
-    self.current_channel = None # TODO
-    self.channels = [] # TODO
+    self.prompt = "[{0}@{1}] {2} => "
+    self.current_channel = None
+    self.channels = [] 
     self.done = False
-    self.registered = False # TODO
-    self.authenticated = False # TODO
+    self.registered = False 
+    self.authenticated = False
     self.new_window = False
     
     try:
@@ -141,6 +141,9 @@ class Client:
         elif regex == win_regex:
           # [0,1,2]
           # 3 wraps around to 0 since modulo
+          if self.current_channel is None:
+            return None
+
           self.current_channel = self.current_channel % len(self.channels)
           self.new_window = True
 
@@ -153,7 +156,7 @@ class Client:
     # translate server return codes
     status_regex = '^%(\d+)'
     r = re.match(status_regex, msg)
-    status_code = r.groups()[0]
+    status_code = int(r.groups()[0])
     switcher = {
         OK_QUIT: 'OK_QUIT',
         OK_REG: 'OK_REG',
@@ -178,7 +181,7 @@ class Client:
         ERR_ALREADYINCHAN: 'ERR_ALREADYINCHAN',
         ERR_OOM: 'ERR_OOM',
       }
-    return switcher.get(status_code, status_code)
+    return switcher.get(status_code)
 
 
   def serverTranslate(self, data):
@@ -217,8 +220,16 @@ class Client:
 
   def writeMessage(self, channel, user, message):
     # line = <sender>: <message>
-    channel_to_add_to = self.channels.index(channel)
-    channel_to_add_to.addLine("{0}: {1}".format(user, message))
+    for c in self.channels:
+      if channel == c.name:
+        c.addLine("{0}: {1}".format(user, message))
+        return
+
+  def writeLine(self, channel, line):
+     for c in self.channels:
+      if channel == c.name:
+        c.addLine(line)
+        return
 
   def respondPing(self, epoch):
     # respond to server message right away.
@@ -234,9 +245,11 @@ class Client:
         print("\033c")
 
         # write prompt and channel messages if we are in a channel
-        if self.current_channel:
-          print(self.channels[self.channel_number])
-          sys.stdout.write(self.prompt.format(self.user, self.fqdn, self.channels[self.current_channel].name()))
+        if self.current_channel is not None:
+          # print channel message buffer
+          sys.stdout.write(self.channels[self.current_channel].backscroll()+'\r')
+          sys.stdout.write(self.prompt.format(self.user, self.fqdn, "#{0}".format(self.channels[self.current_channel].name)))  # wut a lineeeee
+
         else:
           sys.stdout.write(self.prompt.format(self.user, self.fqdn, ''))
 
@@ -270,10 +283,12 @@ class Client:
               # parse server response
               resp = self.serverStatusTranslate(server_response)
 
-              if('JOIN' in server_command and 'OK' in resp):
+              if('JOIN' in server_command and ('OK' in resp or 'ERR_ALREADYINCHAN')):
                 # join the channel
-                channel = server_command.split(' ')[1].strip('#')
+                channel = server_command.split(' ')[1].strip('#').strip('\r')
                 self.channels.append(Channel(channel))  # create a new channel locally.
+                if(len(self.channels) == 1):
+                  self.current_channel = 0  # set the index
 
               elif('LEAVE' in server_command and 'OK' in resp):
                 # leave channel
@@ -299,17 +314,19 @@ class Client:
                 for channel in channels:
                   print channel
 
-              print "Server responded with {0}".format(resp)
-            import time
-            time.sleep(1) # debug
+              if self.current_channel is not None:
+                self.writeLine(self.channels[self.current_channel].name, "Server responded with {0}\r".format(resp))
+              else:
+                print "Server responded with {0}\r".format(resp)
                        
           elif socket == self.socket:
             # message from server
             # ping or new message has arrived.
-            if not server_response:
+            data = self.socket.recv(1024)
+            if not data:
               print "no connection to server"
               sys.exit(1)
-            server_translated = self.serverTranslate(server_response)  # figure out what to do based on response
+            server_translated = self.serverTranslate(data)  # figure out what to do based on response
             if not server_translated:
               #error parsing
               print "Could not parse server response."

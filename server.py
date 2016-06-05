@@ -34,6 +34,7 @@ class User:
     ip, port = connection.getsockname()
     self.ip = ip
     self.port = port
+    self.connection = connection
 
   def checkTimeout(self):
     now = time.time()
@@ -216,7 +217,7 @@ class UserManager:
               users_in_channel.append(user)
           # got a list of users in the channel, now send them a message
           #%<FQDN> <status code> <channel/priv_msg_user> <username> %<message>\r
-          msg_string = "%{0} {1} {2} %{3}\r".format(OK_MSG, channel, send_user, message)
+          msg_string = "%{0} #{1} {2} %{3}\r".format(OK_MSG, channel, send_user, message)
           for user in users_in_channel:
             # message user
             user.sendMessage(msg_string)
