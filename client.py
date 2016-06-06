@@ -53,15 +53,15 @@ class Client:
     self.done = False
     self.registered = False 
     self.authenticated = False
-    self.new_window = False
+    self.clear = False
     
     try:
       self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       self.socket.connect((self.host, self.port))
-      print "Connected to minChat server: {0}:{1}".format(self.host, self.port)
+      sys.stdout.write("Connected to minChat server: {0}:{1}\n".format(self.host, self.port))
 
     except:
-      print "failed to connect to server"
+      sys.stdout.write("Failed to connect to server\n")
 
   def send(self, msg):
     # send a command to server
@@ -90,9 +90,10 @@ class Client:
     reg_regex =  '^/reg\ (\w+)\ (\w+)'
     #/list
     list_regex = '^/list'
-
     #/win
     win_regex = '^/win'
+    #/users
+    user_regex = '^/users #(\w+)'
 
     regex_list = []
     regex_list.append(msg_regex)
@@ -103,6 +104,7 @@ class Client:
     regex_list.append(reg_regex)
     regex_list.append(list_regex)
     regex_list.append(win_regex)
+    regex_list.append(user_regex)
     
     for regex in regex_list:
       r = re.match(regex, data)
@@ -138,14 +140,20 @@ class Client:
         elif regex == list_regex:
           return 'LIST\r'
 
+        elif regex == user_regex:
+          channel = r.groups()[0]
+          return 'MEMLIST #{0}\r'.format(channel)
+
         elif regex == win_regex:
           # [0,1,2]
           # 3 wraps around to 0 since modulo
+          self.clear = True
           if self.current_channel is None:
-            return None
+            return 'WIN'
 
-          self.current_channel = self.current_channel % len(self.channels)
-          self.new_window = True
+          # move to next channel
+          self.current_channel = (self.current_channel + 1 )% len(self.channels)
+          return 'WIN'  # hackkkkkkkkk
 
         else:
           # could not parse. send error to client.
@@ -223,11 +231,13 @@ class Client:
     for c in self.channels:
       if channel == c.name:
         c.addLine("{0}: {1}\n".format(user, message))
+        self.clear = True
         return
 
   def writeLine(self, channel, line):
      for c in self.channels:
       if channel == c.name:
+        self.clear = True
         c.addLine(line + '\n')
         return
 
@@ -242,7 +252,9 @@ class Client:
       try:
         # write screen.
         # clear screen
-        print("\033c")
+        if(self.clear is True):
+          sys.stdout.write("\033c")
+          self.clear = False
 
         # write prompt and channel messages if we are in a channel
         if self.current_channel is not None:
@@ -265,15 +277,20 @@ class Client:
             data = sys.stdin.readline().strip()
             server_command = self.commandTranslate(data)
             if(server_command is None):
-              print "invalid command"
+              sys.stdout.write("Invalid command.\n")
               continue
+
+            if(server_command is 'WIN'):
+              # 1337 haxxxxx
+              continue
+
             if('QUIT' in server_command):
               # EXIT
               self.done = True
 
             if not server_command:
               # error parsing
-              print "Could not parse command."
+              sys.stdout.write("Could not parse command.\n")
               continue
             else:
               # valid command to send to server
@@ -285,7 +302,7 @@ class Client:
               if('MSG' in server_command and 'OK' in resp):
                 # print message on our local screen.
                 # MSG #derp %message
-                message = server_command.split(" ")[1].strip("%").strip('\r')
+                message = server_command.split(" ")[2].strip("%").strip('\r')
                 self.writeLine(self.channels[self.current_channel].name, message)
 
               if('JOIN' in server_command and ('OK' in resp or 'ERR_ALREADYINCHAN')):
@@ -297,8 +314,12 @@ class Client:
 
               elif('LEAVE' in server_command and 'OK' in resp):
                 # leave channel
-                channel = str(server_command.split(' ')[1].strip('#'))
-                self.channels.remove(channel)  # delete channel locally
+                channel = str(server_command.split(' ')[1].strip('#').strip('\r'))
+                for c in self.channels:
+                  if c.name == channel:
+                    self.channels.remove(c) # delete channel locally
+                if len(self.channels) == 0:
+                  self.current_channel = None  # reset to original value
 
               elif('AUTH' in server_command and 'OK' in resp):
                 # server says auth ok 
@@ -309,51 +330,55 @@ class Client:
                 # server says reg ok
                 self.registered = True
 
+              elif('MEMLIST' in server_command and 'OK' in resp):
+                # MEMLIST before LIST
+                # server says list of members ok with status code
+                #%<status code> <list>\r
+                members = server_response.split(" ")[1].strip('\r').split(',')
+                sys.stdout.write("Users in room:\n")
+                for user in members:
+                  sys.stdout.write("{0}\n".format(user))
+
               elif('LIST' in server_command and 'OK' in resp):
                 # server says list ok status code
                 #%<status code> <list> %<optional message>\r
-                csv_channels = server_response.split(" ")[1]
-                channels = csv_channels.split(',')
-                print "Channels on the server:"
+                channels = server_response.split(" ")[1].strip('\r').split(',')
+                sys.stdout.write("Channels on the server:\n")
                 for channel in channels:
-                  print channel
+                  sys.stdout.write("#{0}\n".format(channel))
 
-              if self.current_channel is not None:
-                self.writeLine(self.channels[self.current_channel].name, "Server responded with {0}\r".format(resp))
-              else:
-                print "Server responded with {0}\r".format(resp)
+
+              #if self.current_channel is not None:
+              #  self.writeLine(self.channels[self.current_channel].name, "Server responded with {0}\n".format(resp))
+              #else:
+              sys.stdout.write("Server responded with {0}\n".format(resp))
                        
           elif socket == self.socket:
             # message from server
             # ping or new message has arrived.
             data = self.socket.recv(1024)
             if not data:
-              print "no connection to server"
+              sys.stdout.write("No connection to server.\n")
               sys.exit(1)
             server_translated = self.serverTranslate(data)  # figure out what to do based on response
             if not server_translated:
               #error parsing
-              print "Could not parse server response."
+              sys.stdout.write("Could not parse server response.\n")
               continue
 
-          else:
-            print "other socket?!!"
-
       except KeyboardInterrupt:
-        print 'Exiting!'
+        sys.stdout.write('Exiting!\n')
         self.socket.close()
         break
 
 
 if __name__ == '__main__':
-  if len(sys.argv) < 1:
+  if len(sys.argv) < 2:
         sys.exit('Usage: {0} host'.format(sys.argv[0]))
         
   client = Client(sys.argv[1])
   client.cmdloop()
 
 # TODO
-# add /win method
 # list clients in room
-# print list of rooms 8 Client can list members of a room 3
-# 12 Client can send distinct messages to multiple (selected) rooms 10
+# list rooms to join

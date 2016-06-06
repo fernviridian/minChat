@@ -193,7 +193,6 @@ class UserManager:
     # get list of users in channel self.channelUsers()
     # get socket connections for each of those users
     # for each user, send message from send_user to recv_user
-    # TODO check if user hangs, and skip that user if necessary.
     # messages were sent to all users successfully :)
     # send confirm to send_user when messages sent succesfuuly.
     done = False
@@ -221,7 +220,6 @@ class UserManager:
           for user in users_in_channel:
             # message user
             user.sendMessage(msg_string)
-            # what if sendMessage fails? TODO
             done = True
           break
           
@@ -240,7 +238,6 @@ class UserManager:
 
   def ping(self):
     # ping all users to see if they are alive.
-    # TODO
     pass
 
 ############################################################################
