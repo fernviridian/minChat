@@ -395,40 +395,43 @@ channels = []
 ############################################################################
 
 while running:
+  try:
+    previous_time = time.time()
 
-  # shitty keepalive here......
-  previous_time = time.time()
+    now = time.time()
+    if(now - previous_time > keepalive):
+      # hacky timeout without threads is nasty?
+      user_manager.ping()
+      current_time = now
+   
+    readable, writable, errored = select.select([server] + connections, [], [])
+    for connection in readable:
 
-  now = time.time()
-  if(now - previous_time > keepalive):
-    # run keepalive bulsshit
-    # hacky timeout without threads is nasty?
-    user_manager.ping()
-    current_time = now
- 
-  readable, writable, errored = select.select([server] + connections, [], [])
-  for connection in readable:
+      if connection == server:
+        # socket is server socket
+        # new connection to server socket
+        conn, client = connection.accept()
+        connections.append(conn)
 
-    if connection == server:
-      # socket is server socket
-      # new connection to server socket
-      conn, client = connection.accept()
-      connections.append(conn)
-
-    else:
-      # all other sockets, data to be read from socket
-      print "all other sockets, returning client connection data"
-
-      data = connection.recv(size)
-      if not data:
-        print "conn closed"
-        connections.remove(connection)
       else:
-        # do something with incoming data message
-        server_response = dispatch(data, connection)
-        if not server_response:
-          # HACKy stuff for message
-          continue
-        connection.send(server_response)
+        # all other sockets, data to be read from socket
+        print "all other sockets, returning client connection data"
+
+        data = connection.recv(size)
+        if not data:
+          print "conn closed"
+          connections.remove(connection)
+        else:
+          # do something with incoming data message
+          server_response = dispatch(data, connection)
+          if not server_response:
+            # HACKy stuff for message
+            continue
+          connection.send(server_response)
+
+  except KeyboardInterrupt:
+    print "Exiting!"
+    server.close()
+    break
 
 server.close()
